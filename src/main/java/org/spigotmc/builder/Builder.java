@@ -757,6 +757,11 @@ public class Builder
 
     public static int runProcess(File workDir, String... command) throws Exception
     {
+        if ( command[0].equals( "java" ) )
+        {
+            command[0] = System.getProperty( "java.home" ) + "/bin/" + command[0];
+        }
+
         if ( msysDir != null )
         {
             if ( "bash".equals( command[0] ) )
@@ -776,11 +781,6 @@ public class Builder
     {
         Preconditions.checkArgument( workDir != null, "workDir" );
         Preconditions.checkArgument( command != null && command.length > 0, "Invalid command" );
-
-        if ( command[0].equals( "java" ) )
-        {
-            command[0] = System.getProperty( "java.home" ) + "/bin/" + command[0];
-        }
 
         ProcessBuilder pb = new ProcessBuilder( command );
         pb.directory( workDir );
