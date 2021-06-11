@@ -71,6 +71,7 @@ import org.eclipse.jgit.api.errors.JGitInternalException;
 import org.eclipse.jgit.lib.StoredConfig;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.FetchResult;
+import org.spigotmc.mapper.MapUtil;
 
 public class Builder
 {
@@ -84,6 +85,7 @@ public class Builder
     private static boolean generateSource;
     private static boolean generateDocs;
     private static boolean dev;
+    private static boolean remapped;
     private static String applyPatchesShell = "sh";
     private static boolean didClone = false;
     //
@@ -151,6 +153,7 @@ public class Builder
         OptionSpec<Void> generateSourceFlag = parser.accepts( "generate-source", "Generate source jar" );
         OptionSpec<Void> generateDocsFlag = parser.accepts( "generate-docs", "Generate Javadoc jar" );
         OptionSpec<Void> devFlag = parser.accepts( "dev", "Development mode" );
+        OptionSpec<Void> remappedFlag = parser.accepts( "remapped", "Produce and install extra remapped jars" );
         OptionSpec<File> outputDir = parser.acceptsAll( Arrays.asList( "o", "output-dir" ), "Final jar output directory" ).withRequiredArg().ofType( File.class ).defaultsTo( CWD );
         OptionSpec<String> jenkinsVersion = parser.accepts( "rev", "Version to build" ).withRequiredArg().defaultsTo( "latest" );
         OptionSpec<Compile> toCompile = parser.accepts( "compile", "Software to compile" ).withRequiredArg().ofType( Compile.class ).withValuesConvertedBy( new EnumConverter<Compile>( Compile.class )
@@ -173,6 +176,7 @@ public class Builder
         generateSource = options.has( generateSourceFlag );
         generateDocs = options.has( generateDocsFlag );
         dev = options.has( devFlag );
+        remapped = options.has( remappedFlag );
         compile = options.valuesOf( toCompile );
         if ( options.has( skipCompileFlag ) )
         {
@@ -429,6 +433,40 @@ public class Builder
         {
             System.out.println( "Final mapped jar: " + finalMappedJar + " does not exist, creating (please wait)!" );
 
+            File classMappings = new File( "BuildData/mappings/" + versionInfo.getClassMappings() );
+            File memberMappings = new File( "BuildData/mappings/" + versionInfo.getMemberMappings() );
+            File fieldMappings = new File( workDir, "bukkit-" + mappingsVersion + "-fields.csrg" );
+            if ( versionInfo.getMappingsUrl() != null )
+            {
+                File mojangMappings = new File( workDir, "minecraft_server." + versionInfo.getMinecraftVersion() + ".txt" );
+                if ( !mojangMappings.exists() )
+                {
+                    download( versionInfo.getMappingsUrl(), mojangMappings );
+                }
+
+                MapUtil mapUtil = new MapUtil();
+                mapUtil.loadBuk( classMappings );
+                if ( !fieldMappings.exists() )
+                {
+                    mapUtil.makeFieldMaps( mojangMappings, fieldMappings );
+                }
+
+                File combinedMappings = new File( workDir, "bukkit-" + mappingsVersion + "-combined.csrg" );
+                if ( !combinedMappings.exists() )
+                {
+                    mapUtil.makeCombinedMaps( combinedMappings, memberMappings );
+                }
+
+                runMaven( CWD, "install:install-file", "-Dfile=" + fieldMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                        "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-fields" );
+
+                runMaven( CWD, "install:install-file", "-Dfile=" + combinedMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                        "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot" );
+
+                runMaven( CWD, "install:install-file", "-Dfile=" + mojangMappings, "-Dpackaging=txt", "-DgroupId=org.spigotmc",
+                        "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-mojang" );
+            }
+
             File clMappedJar = new File( finalMappedJar + "-cl" );
             File mMappedJar = new File( finalMappedJar + "-m" );
 
@@ -436,25 +474,25 @@ public class Builder
             {
                 versionInfo.setClassMapCommand( "java -jar BuildData/bin/SpecialSource-2.jar map -i {0} -m {1} -o {2}" );
             }
-            runProcess( CWD, MessageFormat.format( versionInfo.getClassMapCommand(), vanillaJar.getPath(), "BuildData/mappings/" + versionInfo.getClassMappings(), clMappedJar.getPath() ).split( " " ) );
+            runProcess( CWD, MessageFormat.format( versionInfo.getClassMapCommand(), vanillaJar.getPath(), classMappings.getPath(), clMappedJar.getPath() ).split( " " ) );
 
             if ( versionInfo.getMemberMapCommand() == null )
             {
                 versionInfo.setMemberMapCommand( "java -jar BuildData/bin/SpecialSource-2.jar map -i {0} -m {1} -o {2}" );
             }
             runProcess( CWD, MessageFormat.format( versionInfo.getMemberMapCommand(), clMappedJar.getPath(),
-                    "BuildData/mappings/" + versionInfo.getMemberMappings(), mMappedJar.getPath() ).split( " " ) );
+                    memberMappings.getPath(), mMappedJar.getPath() ).split( " " ) );
 
             if ( versionInfo.getFinalMapCommand() == null )
             {
                 versionInfo.setFinalMapCommand( "java -jar BuildData/bin/SpecialSource.jar --kill-lvt -i {0} --access-transformer {1} -m {2} -o {3}" );
             }
             runProcess( CWD, MessageFormat.format( versionInfo.getFinalMapCommand(), mMappedJar.getPath(), "BuildData/mappings/" + versionInfo.getAccessTransforms(),
-                    "BuildData/mappings/" + versionInfo.getPackageMappings(), finalMappedJar.getPath() ).split( " " ) );
+                    ( versionInfo.getPackageMappings() == null ) ? fieldMappings.getPath() : "BuildData/mappings/" + versionInfo.getPackageMappings(), finalMappedJar.getPath() ).split( " " ) );
         }
 
         runMaven( CWD, "install:install-file", "-Dfile=" + finalMappedJar, "-Dpackaging=jar", "-DgroupId=org.spigotmc",
-                "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getMinecraftVersion() + "-SNAPSHOT" );
+                "-DartifactId=minecraft-server", "-Dversion=" + ( versionInfo.getSpigotVersion() != null ? versionInfo.getSpigotVersion() : versionInfo.getMinecraftVersion() + "-SNAPSHOT" ) );
 
         File decompileDir = new File( workDir, "decompile-" + mappingsVersion );
         if ( !decompileDir.exists() )
@@ -633,20 +671,41 @@ public class Builder
         }
 
         System.out.println( "Success! Everything completed successfully. Copying final .jar files now." );
+
+        String suffix = ( ( versionInfo.getSpigotVersion() != null ) ? "-" + versionInfo.getSpigotVersion() : "" ) + ".jar";
         if ( compile.contains( Compile.CRAFTBUKKIT ) && ( versionInfo.getToolsVersion() < 101 || versionInfo.getToolsVersion() > 104 ) )
         {
-            copyJar( "CraftBukkit/target", "craftbukkit", new File( outputDir.value( options ), "craftbukkit-" + versionInfo.getMinecraftVersion() + ".jar" ) );
+            copyJar( "CraftBukkit/target", "craftbukkit", suffix, new File( outputDir.value( options ), "craftbukkit-" + versionInfo.getMinecraftVersion() + ".jar" ) );
         }
         if ( compile.contains( Compile.SPIGOT ) )
         {
-            copyJar( "Spigot/Spigot-Server/target", "spigot", new File( outputDir.value( options ), "spigot-" + versionInfo.getMinecraftVersion() + ".jar" ) );
+            copyJar( "Spigot/Spigot-Server/target", "spigot", suffix, new File( outputDir.value( options ), "spigot-" + versionInfo.getMinecraftVersion() + ".jar" ) );
         }
     }
 
     private static boolean checkHash(File vanillaJar, VersionInfo versionInfo) throws IOException
     {
-        String hash = Files.asByteSource( vanillaJar ).hash( HashFormat.MD5.getHash() ).toString();
-        if ( !dev && versionInfo.getMinecraftHash() != null && !hash.equals( versionInfo.getMinecraftHash() ) )
+        if ( dev )
+        {
+            return true;
+        }
+
+        String hash;
+        boolean result;
+        if ( versionInfo.getMinecraftHash() != null )
+        {
+            hash = Files.asByteSource( vanillaJar ).hash( HashFormat.MD5.getHash() ).toString();
+            result = hash.equals( versionInfo.getMinecraftHash() );
+        } else if ( versionInfo.getShaServerHash() != null )
+        {
+            hash = Files.asByteSource( vanillaJar ).hash( HashFormat.SHA1.getHash() ).toString();
+            result = hash.equals( versionInfo.getShaServerHash() );
+        } else
+        {
+            return true;
+        }
+
+        if ( !result )
         {
             System.err.println( "**** Warning, Minecraft jar hash of " + hash + " does not match stored hash of " + versionInfo.getMinecraftHash() );
             return false;
@@ -678,14 +737,14 @@ public class Builder
         }
     }
 
-    public static void copyJar(String path, final String jarPrefix, File outJar) throws Exception
+    public static void copyJar(String path, final String jarPrefix, final String jarSuffix, File outJar) throws Exception
     {
         File[] files = new File( path ).listFiles( new FilenameFilter()
         {
             @Override
             public boolean accept(File dir, String name)
             {
-                return name.startsWith( jarPrefix ) && name.endsWith( ".jar" );
+                return name.startsWith( jarPrefix ) && name.endsWith( jarSuffix );
             }
         } );
 
@@ -748,6 +807,11 @@ public class Builder
         {
             args.add( "-P" );
             args.add( "development" );
+        }
+        if ( remapped )
+        {
+            args.add( "-P" );
+            args.add( "remapped" );
         }
 
         args.addAll( Arrays.asList( command ) );
@@ -943,8 +1007,20 @@ public class Builder
         return Iterables.getOnlyElement( repo.log().setMaxCount( 1 ).call() ).getName();
     }
 
+    public static File download(String url, File target) throws IOException
+    {
+        return download( url, target, HashFormat.SHA1, "!" );
+    }
+
     public static File download(String url, File target, HashFormat hashFormat, String goodHash) throws IOException
     {
+        String shaHash = VersionInfo.hashFromUrl( url );
+        if ( shaHash != null )
+        {
+            hashFormat = HashFormat.SHA1;
+            goodHash = shaHash;
+        }
+
         System.out.println( "Starting download of " + url );
 
         byte[] bytes = Resources.toByteArray( new URL( url ) );
@@ -1056,6 +1132,13 @@ public class Builder
             public HashFunction getHash()
             {
                 return Hashing.md5();
+            }
+        }, SHA1
+        {
+            @Override
+            public HashFunction getHash()
+            {
+                return Hashing.sha1();
             }
         }, SHA256
         {

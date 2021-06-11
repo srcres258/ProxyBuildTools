@@ -1,5 +1,7 @@
 package org.spigotmc.builder;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -19,6 +21,8 @@ public class VersionInfo
     private String finalMapCommand;
     private String decompileCommand;
     private String serverUrl;
+    private String mappingsUrl;
+    private String spigotVersion;
     private int toolsVersion = -1;
 
     public VersionInfo(String minecraftVersion, String accessTransforms, String classMappings, String memberMappings, String packageMappings, String minecraftHash)
@@ -40,5 +44,22 @@ public class VersionInfo
         this.packageMappings = packageMappings;
         this.minecraftHash = minecraftHash;
         this.decompileCommand = decompileCommand;
+    }
+
+    public String getShaServerHash()
+    {
+        return hashFromUrl( serverUrl );
+    }
+
+    public String getShaMappingsHash()
+    {
+        return hashFromUrl( mappingsUrl );
+    }
+    private static final Pattern URL_PATTERN = Pattern.compile( "https://launcher.mojang.com/v1/objects/([0-9a-f]{40})/.*" );
+
+    public static String hashFromUrl(String url)
+    {
+        Matcher match = URL_PATTERN.matcher( url );
+        return ( match.find() ) ? match.group( 1 ) : null;
     }
 }
