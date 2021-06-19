@@ -832,9 +832,18 @@ public class Builder
             {
                 command[0] = "git-bash";
             }
+
+            // BUILDTOOLS-594, etc: Many broken systems lack cmd.exe in PATH for unknown reasons (user error?)
+            String cmd = System.getenv( "ComSpec" );
+            if ( cmd == null )
+            {
+                // Hopefully nothing messes up both PATH and ComSpec (what a broken system)
+                cmd = "cmd.exe";
+            }
+
             String[] shim = new String[]
             {
-                "cmd.exe", "/D", "/C"
+                cmd, "/D", "/C"
             };
             command = ObjectArrays.concat( shim, command, String.class );
         }
