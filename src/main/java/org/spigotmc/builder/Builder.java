@@ -877,7 +877,7 @@ public class Builder
 
             pb.environment().put( "_JAVA_OPTIONS", javaOptions );
         }
-        if ( msysDir != null )
+        if ( IS_WINDOWS )
         {
             String pathEnv = null;
             for ( String key : pb.environment().keySet() )
@@ -892,8 +892,19 @@ public class Builder
                 throw new IllegalStateException( "Could not find path variable!" );
             }
 
-            String path = msysDir.getAbsolutePath() + ";" + new File( msysDir, "bin" ).getAbsolutePath() + ";" + pb.environment().get( pathEnv );
-            pb.environment().put( pathEnv, path );
+            if ( msysDir != null )
+            {
+                String path = msysDir.getAbsolutePath() + ";" + new File( msysDir, "bin" ).getAbsolutePath() + ";" + pb.environment().get( pathEnv );
+                pb.environment().put( pathEnv, path );
+            }
+
+            String path = pb.environment().get( pathEnv );
+            // Not strictly correct, but least likely to be a false positive
+            if ( !path.contains( "C:\\WINDOWS\\system32;" ) )
+            {
+                path = System.getenv( "SystemRoot" ) + "\\system32;" + path;
+                pb.environment().put( pathEnv, path );
+            }
         }
 
         final Process ps = pb.start();
