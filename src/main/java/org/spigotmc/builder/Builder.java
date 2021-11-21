@@ -33,7 +33,9 @@ import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.FileSystem;
 import java.nio.file.FileSystemException;
+import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -47,6 +49,7 @@ import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import javax.net.ssl.HostnameVerifier;
@@ -396,7 +399,8 @@ public class Builder
         }
 
         File vanillaJar = new File( workDir, "minecraft_server." + versionInfo.getMinecraftVersion() + ".jar" );
-        if ( !vanillaJar.exists() || !checkHash( vanillaJar, versionInfo ) )
+        File embeddedVanillaJar = new File( workDir, "server-" + versionInfo.getMinecraftVersion() + ".jar" );
+        if ( !checkHash( vanillaJar, versionInfo ) )
         {
             if ( versionInfo.getServerUrl() != null )
             {
@@ -404,6 +408,33 @@ public class Builder
             } else
             {
                 download( String.format( "https://s3.amazonaws.com/Minecraft.Download/versions/%1$s/minecraft_server.%1$s.jar", versionInfo.getMinecraftVersion() ), vanillaJar, HashFormat.MD5, versionInfo.getMinecraftHash() );
+            }
+        }
+
+        try ( JarFile jar = new JarFile( vanillaJar ) )
+        {
+            ZipEntry entry = jar.getEntry( "META-INF/versions/" + versionInfo.getMinecraftVersion() + "/server-" + versionInfo.getMinecraftVersion() + ".jar" );
+            if ( entry != null )
+            {
+                if ( !checkHash( embeddedVanillaJar, HashFormat.SHA256, versionInfo.getMinecraftHash() ) )
+                {
+                    try ( InputStream is = jar.getInputStream( entry ) )
+                    {
+                        byte[] embedded = ByteStreams.toByteArray( is );
+                        if ( embedded != null )
+                        {
+                            Files.write( embedded, embeddedVanillaJar );
+                        }
+                    }
+
+                    try ( FileSystem zipfs = FileSystems.newFileSystem( embeddedVanillaJar.toPath(), (ClassLoader) null ) )
+                    {
+                        java.nio.file.Files.delete( zipfs.getPath( "/META-INF/MOJANGCS.RSA" ) );
+                        java.nio.file.Files.delete( zipfs.getPath( "/META-INF/MOJANGCS.SF" ) );
+                    }
+                }
+
+                vanillaJar = embeddedVanillaJar;
             }
         }
 
@@ -446,22 +477,32 @@ public class Builder
 
                 MapUtil mapUtil = new MapUtil();
                 mapUtil.loadBuk( classMappings );
-                if ( !fieldMappings.exists() )
+                if ( !memberMappings.exists() )
                 {
-                    mapUtil.makeFieldMaps( mojangMappings, fieldMappings );
-                }
+                    memberMappings = new File( workDir, "bukkit-" + mappingsVersion + "-members.csrg" );;
+                    mapUtil.makeFieldMaps( mojangMappings, memberMappings, true );
 
-                File combinedMappings = new File( workDir, "bukkit-" + mappingsVersion + "-combined.csrg" );
-                if ( !combinedMappings.exists() )
+                    runMaven( CWD, "install:install-file", "-Dfile=" + memberMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                            "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-members", "-DgeneratePom=false" );
+
+                    runMaven( CWD, "install:install-file", "-Dfile=" + classMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                            "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
+                } else if ( !fieldMappings.exists() )
                 {
-                    mapUtil.makeCombinedMaps( combinedMappings, memberMappings );
+                    mapUtil.makeFieldMaps( mojangMappings, fieldMappings, false );
+
+                    runMaven( CWD, "install:install-file", "-Dfile=" + fieldMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                            "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-fields", "-DgeneratePom=false" );
+
+                    File combinedMappings = new File( workDir, "bukkit-" + mappingsVersion + "-combined.csrg" );
+                    if ( !combinedMappings.exists() )
+                    {
+                        mapUtil.makeCombinedMaps( combinedMappings, memberMappings );
+                    }
+
+                    runMaven( CWD, "install:install-file", "-Dfile=" + combinedMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                            "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
                 }
-
-                runMaven( CWD, "install:install-file", "-Dfile=" + fieldMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
-                        "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-fields", "-DgeneratePom=false" );
-
-                runMaven( CWD, "install:install-file", "-Dfile=" + combinedMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
-                        "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
 
                 runMaven( CWD, "install:install-file", "-Dfile=" + mojangMappings, "-Dpackaging=txt", "-DgroupId=org.spigotmc",
                         "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-mojang", "-DgeneratePom=false" );
@@ -685,29 +726,36 @@ public class Builder
 
     private static boolean checkHash(File vanillaJar, VersionInfo versionInfo) throws IOException
     {
+        if ( versionInfo.getShaServerHash() != null )
+        {
+            return checkHash( vanillaJar, HashFormat.SHA1, versionInfo.getShaServerHash() );
+        } else if ( versionInfo.getMinecraftHash() != null )
+        {
+            return checkHash( vanillaJar, HashFormat.MD5, versionInfo.getMinecraftHash() );
+        } else
+        {
+            return true;
+        }
+    }
+
+    private static boolean checkHash(File vanillaJar, HashFormat hashFormat, String goodHash) throws IOException
+    {
+        if ( !vanillaJar.isFile() )
+        {
+            return false;
+        }
+
         if ( dev )
         {
             return true;
         }
 
-        String hash;
-        boolean result;
-        if ( versionInfo.getMinecraftHash() != null )
-        {
-            hash = Files.asByteSource( vanillaJar ).hash( HashFormat.MD5.getHash() ).toString();
-            result = hash.equals( versionInfo.getMinecraftHash() );
-        } else if ( versionInfo.getShaServerHash() != null )
-        {
-            hash = Files.asByteSource( vanillaJar ).hash( HashFormat.SHA1.getHash() ).toString();
-            result = hash.equals( versionInfo.getShaServerHash() );
-        } else
-        {
-            return true;
-        }
+        String hash = Files.asByteSource( vanillaJar ).hash( hashFormat.getHash() ).toString();
+        boolean result = hash.equals( goodHash );
 
         if ( !result )
         {
-            System.err.println( "**** Warning, Minecraft jar hash of " + hash + " does not match stored hash of " + versionInfo.getMinecraftHash() );
+            System.err.println( "**** Warning, Minecraft jar hash of " + hash + " does not match stored hash of " + goodHash );
             return false;
         } else
         {

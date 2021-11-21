@@ -19,6 +19,7 @@ public class MapUtil
     //
     private List<String> header = new ArrayList<>();
     private final BiMap<String, String> obf2Buk = HashBiMap.create();
+    private final BiMap<String, String> moj2Obf = HashBiMap.create();
 
     public void loadBuk(File bukClasses) throws IOException
     {
@@ -38,8 +39,28 @@ public class MapUtil
         }
     }
 
-    public void makeFieldMaps(File mojIn, File fields) throws IOException
+    public void makeFieldMaps(File mojIn, File fields, boolean includeMethods) throws IOException
     {
+        if ( includeMethods )
+        {
+            for ( String line : Files.readAllLines( mojIn.toPath() ) )
+            {
+                if ( line.startsWith( "#" ) )
+                {
+                    continue;
+                }
+
+                if ( line.endsWith( ":" ) )
+                {
+                    String[] parts = line.split( " -> " );
+                    String orig = parts[0].replace( '.', '/' );
+                    String obf = parts[1].substring( 0, parts[1].length() - 1 ).replace( '.', '/' );
+
+                    moj2Obf.put( orig, obf );
+                }
+            }
+        }
+
         List<String> outFields = new ArrayList<>( header );
 
         String currentClass = null;
@@ -76,16 +97,26 @@ public class MapUtil
                 String nameDesc = matcher.group( 2 );
                 if ( !nameDesc.contains( "(" ) )
                 {
-                    if ( nameDesc.contains( "$" ) )
+                    if ( nameDesc.equals( obf ) || nameDesc.contains( "$" ) )
                     {
                         continue;
                     }
-                    if ( obf.equals( "if" ) || obf.equals( "do" ) )
+                    if ( !includeMethods && ( obf.equals( "if" ) || obf.equals( "do" ) ) )
                     {
                         obf += "_";
                     }
 
                     outFields.add( currentClass + " " + obf + " " + nameDesc );
+                } else if ( includeMethods )
+                {
+                    String sig = csrgDesc( moj2Obf, obf2Buk, nameDesc.substring( nameDesc.indexOf( '(' ) ), matcher.group( 1 ) );
+                    String mojName = nameDesc.substring( 0, nameDesc.indexOf( '(' ) );
+
+                    if ( obf.equals( mojName ) || mojName.contains( "$" ) || obf.equals( "<init>" ) || obf.equals( "<clinit>" ) )
+                    {
+                        continue;
+                    }
+                    outFields.add( currentClass + " " + obf + " " + sig + " " + mojName );
                 }
             }
         }
@@ -207,5 +238,57 @@ public class MapUtil
                 out.append( "L" ).append( map.containsKey( type ) ? map.get( type ) : type ).append( ";" );
         }
         return desc.substring( size );
+    }
+
+    private static String csrgDesc(Map<String, String> first, Map<String, String> second, String args, String ret)
+    {
+        String[] parts = args.substring( 1, args.length() - 1 ).split( "," );
+        StringBuilder desc = new StringBuilder( "(" );
+        for ( String part : parts )
+        {
+            if ( part.isEmpty() )
+            {
+                continue;
+            }
+            desc.append( toJVMType( first, second, part ) );
+        }
+        desc.append( ")" );
+        desc.append( toJVMType( first, second, ret ) );
+        return desc.toString();
+    }
+
+    private static String toJVMType(Map<String, String> first, Map<String, String> second, String type)
+    {
+        switch ( type )
+        {
+            case "byte":
+                return "B";
+            case "char":
+                return "C";
+            case "double":
+                return "D";
+            case "float":
+                return "F";
+            case "int":
+                return "I";
+            case "long":
+                return "J";
+            case "short":
+                return "S";
+            case "boolean":
+                return "Z";
+            case "void":
+                return "V";
+            default:
+                if ( type.endsWith( "[]" ) )
+                {
+                    return "[" + toJVMType( first, second, type.substring( 0, type.length() - 2 ) );
+                }
+                String clazzType = type.replace( '.', '/' );
+                String obf = deobfClass( clazzType, first );
+                String mappedType = deobfClass( ( obf != null ) ? obf : clazzType, second );
+
+                return "L" + ( ( mappedType != null ) ? mappedType : clazzType ) + ";";
+        }
     }
 }
