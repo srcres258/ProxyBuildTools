@@ -697,6 +697,16 @@ public class Builder
             {
                 System.out.println( "Compiling Spigot & Spigot-API" );
                 runMaven( spigot, "clean", "install" );
+
+                File spigotApi = new File( spigot, "Spigot-API" );
+                if ( generateDocs )
+                {
+                    runMaven( spigotApi, "javadoc:jar" );
+                }
+                if ( generateSource )
+                {
+                    runMaven( spigotApi, "source:jar" );
+                }
             }
         } catch ( Exception ex )
         {
