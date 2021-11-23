@@ -713,7 +713,9 @@ public class Builder
 
         System.out.println( "Success! Everything completed successfully. Copying final .jar files now." );
 
-        String suffix = ( ( versionInfo.getSpigotVersion() != null ) ? "-" + versionInfo.getSpigotVersion() : "" ) + ".jar";
+        String base = ( versionInfo.getSpigotVersion() != null ) ? "-" + versionInfo.getSpigotVersion() : "";
+        String bootstrap = ( versionInfo.getToolsVersion() >= 138 ) ? "-bootstrap" : "";
+        String suffix = base + bootstrap + ".jar";
         if ( compile.contains( Compile.CRAFTBUKKIT ) && ( versionInfo.getToolsVersion() < 101 || versionInfo.getToolsVersion() > 104 ) )
         {
             copyJar( "CraftBukkit/target", "craftbukkit", suffix, new File( outputDir.value( options ), "craftbukkit-" + versionInfo.getMinecraftVersion() + ".jar" ) );
