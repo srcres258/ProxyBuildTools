@@ -23,7 +23,6 @@ import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -52,10 +51,8 @@ import java.util.function.Predicate;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import javax.swing.JFrame;
@@ -479,7 +476,7 @@ public class Builder
                 mapUtil.loadBuk( classMappings );
                 if ( !memberMappings.exists() )
                 {
-                    memberMappings = new File( workDir, "bukkit-" + mappingsVersion + "-members.csrg" );;
+                    memberMappings = new File( workDir, "bukkit-" + mappingsVersion + "-members.csrg" );
                     mapUtil.makeFieldMaps( mojangMappings, memberMappings, true );
 
                     runMaven( CWD, "install:install-file", "-Dfile=" + memberMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
@@ -541,15 +538,7 @@ public class Builder
             decompileDir.mkdir();
 
             File clazzDir = new File( decompileDir, "classes" );
-            unzip( finalMappedJar, clazzDir, new Predicate<String>()
-            {
-
-                @Override
-                public boolean test(String input)
-                {
-                    return input.startsWith( "net/minecraft" );
-                }
-            } );
+            unzip( finalMappedJar, clazzDir, (input) -> input.startsWith( "net/minecraft" ) );
             if ( versionInfo.getDecompileCommand() == null )
             {
                 versionInfo.setDecompileCommand( "java -jar BuildData/bin/fernflower.jar -dgs=1 -hdc=0 -rbr=0 -asc=1 -udv=0 {0} {1}" );
@@ -622,13 +611,14 @@ public class Builder
                 Patch parsedPatch = DiffUtils.parseUnifiedDiff( readFile );
                 List<?> modifiedLines = DiffUtils.patch( Files.readLines( clean, Charsets.UTF_8 ), parsedPatch );
 
-                BufferedWriter bw = new BufferedWriter( new FileWriter( t ) );
-                for ( Object line : modifiedLines )
+                try ( BufferedWriter bw = new BufferedWriter( new FileWriter( t ) ) )
                 {
-                    bw.write( (String) line );
-                    bw.newLine();
+                    for ( Object line : modifiedLines )
+                    {
+                        bw.write( (String) line );
+                        bw.newLine();
+                    }
                 }
-                bw.close();
             } catch ( Exception ex )
             {
                 throw new RuntimeException( "Error patching " + relativeName, ex );
@@ -780,31 +770,15 @@ public class Builder
         con.setConnectTimeout( 5000 );
         con.setReadTimeout( 5000 );
 
-        InputStreamReader r = null;
-        try
+        try ( InputStreamReader r = new InputStreamReader( con.getInputStream() ) )
         {
-            r = new InputStreamReader( con.getInputStream() );
-
             return CharStreams.toString( r );
-        } finally
-        {
-            if ( r != null )
-            {
-                r.close();
-            }
         }
     }
 
     public static void copyJar(String path, final String jarPrefix, final String jarSuffix, File outJar) throws Exception
     {
-        File[] files = new File( path ).listFiles( new FilenameFilter()
-        {
-            @Override
-            public boolean accept(File dir, String name)
-            {
-                return name.startsWith( jarPrefix ) && name.endsWith( jarSuffix );
-            }
-        } );
+        File[] files = new File( path ).listFiles( (dir, name) -> name.startsWith( jarPrefix ) && name.endsWith( jarSuffix ) );
 
         if ( !outJar.getParentFile().isDirectory() )
         {
@@ -848,7 +822,7 @@ public class Builder
 
     public static int runMaven(File workDir, String... command) throws Exception
     {
-        List<String> args = new LinkedList<String>();
+        List<String> args = new LinkedList<>();
 
         if ( IS_WINDOWS )
         {
@@ -990,8 +964,7 @@ public class Builder
         @Override
         public void run()
         {
-            BufferedReader br = new BufferedReader( new InputStreamReader( in ) );
-            try
+            try ( BufferedReader br = new BufferedReader( new InputStreamReader( in ) ) )
             {
                 String line;
                 while ( ( line = br.readLine() ) != null )
@@ -1013,9 +986,7 @@ public class Builder
     public static void unzip(File zipFile, File targetFolder, Predicate<String> filter) throws IOException
     {
         targetFolder.mkdir();
-        ZipFile zip = new ZipFile( zipFile );
-
-        try
+        try ( ZipFile zip = new ZipFile( zipFile ) )
         {
             for ( Enumeration<? extends ZipEntry> entries = zip.entries(); entries.hasMoreElements(); )
             {
@@ -1041,22 +1012,13 @@ public class Builder
                     outFile.getParentFile().mkdirs();
                 }
 
-                InputStream is = zip.getInputStream( entry );
-                OutputStream os = new FileOutputStream( outFile );
-                try
+                try ( InputStream is = zip.getInputStream( entry ); OutputStream os = new FileOutputStream( outFile ); )
                 {
                     ByteStreams.copy( is, os );
-                } finally
-                {
-                    is.close();
-                    os.close();
                 }
 
                 System.out.println( "Extracted: " + outFile );
             }
-        } finally
-        {
-            zip.close();
         }
     }
 
@@ -1064,9 +1026,7 @@ public class Builder
     {
         System.out.println( "Starting clone of " + url + " to " + target );
 
-        Git result = Git.cloneRepository().setURI( url ).setDirectory( target ).call();
-
-        try
+        try ( Git result = Git.cloneRepository().setURI( url ).setDirectory( target ).call() )
         {
             StoredConfig config = result.getRepository().getConfig();
             config.setBoolean( "core", null, "autocrlf", autocrlf );
@@ -1074,9 +1034,6 @@ public class Builder
 
             didClone = true;
             System.out.println( "Cloned git repository " + url + " to " + target.getAbsolutePath() + ". Current HEAD: " + commitHash( result ) );
-        } finally
-        {
-            result.close();
         }
     }
 
@@ -1150,20 +1107,8 @@ public class Builder
             HttpsURLConnection.setDefaultSSLSocketFactory( sc.getSocketFactory() );
 
             // Trust host names
-            HostnameVerifier allHostsValid = new HostnameVerifier()
-            {
-                @Override
-                public boolean verify(String hostname, SSLSession session)
-                {
-                    return true;
-                }
-            };
-            HttpsURLConnection.setDefaultHostnameVerifier( allHostsValid );
-        } catch ( NoSuchAlgorithmException ex )
-        {
-            System.out.println( "Failed to disable https certificate check" );
-            ex.printStackTrace( System.err );
-        } catch ( KeyManagementException ex )
+            HttpsURLConnection.setDefaultHostnameVerifier( (hostname, session) -> true );
+        } catch ( NoSuchAlgorithmException | KeyManagementException ex )
         {
             System.out.println( "Failed to disable https certificate check" );
             ex.printStackTrace( System.err );
@@ -1214,6 +1159,7 @@ public class Builder
         }, SHA1
         {
             @Override
+            @SuppressWarnings("deprecation")
             public HashFunction getHash()
             {
                 return Hashing.sha1();
