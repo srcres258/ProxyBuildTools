@@ -59,6 +59,11 @@ public class VersionInfo
 
     public static String hashFromUrl(String url)
     {
+        if ( url == null )
+        {
+            return null;
+        }
+
         Matcher match = URL_PATTERN.matcher( url );
         return ( match.find() ) ? match.group( 1 ) : null;
     }
