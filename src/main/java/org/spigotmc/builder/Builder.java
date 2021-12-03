@@ -483,18 +483,11 @@ public class Builder
                     mapUtil.makeFieldMaps( mojangMappings, fieldMappings, false );
                 }
 
-                // 1.18
+                // 1.17+
                 if ( memberMappings.exists() )
                 {
                     runMaven( CWD, "install:install-file", "-Dfile=" + memberMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
                             "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-members", "-DgeneratePom=false" );
-                }
-
-                // 1.18
-                if ( classMappings.exists() )
-                {
-                    runMaven( CWD, "install:install-file", "-Dfile=" + classMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
-                            "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
                 }
 
                 // 1.17
@@ -510,6 +503,11 @@ public class Builder
                     }
 
                     runMaven( CWD, "install:install-file", "-Dfile=" + combinedMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                            "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
+                } else
+                {
+                    // 1.18+
+                    runMaven( CWD, "install:install-file", "-Dfile=" + classMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
                             "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
                 }
 
