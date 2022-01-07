@@ -257,6 +257,15 @@ public class Builder
             runProcess( CWD, "git", "config", "--global", "user.email", "unconfigured@null.spigotmc.org" );
         }
 
+        try
+        {
+            runProcess( CWD, "java", "-version" );
+        } catch ( Exception ex )
+        {
+            System.out.println( "Could not successfully run Java." + ex.getMessage() );
+            System.exit( 1 );
+        }
+
         if ( !dontUpdate && !dev )
         {
             String askedVersion = options.valueOf( jenkinsVersion );
