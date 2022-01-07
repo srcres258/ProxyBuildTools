@@ -257,6 +257,58 @@ public class Builder
             runProcess( CWD, "git", "config", "--global", "user.email", "unconfigured@null.spigotmc.org" );
         }
 
+        if ( !dontUpdate && !dev )
+        {
+            String askedVersion = options.valueOf( jenkinsVersion );
+            System.out.println( "Attempting to build version: '" + askedVersion + "' use --rev <version> to override" );
+
+            String verInfo;
+            try
+            {
+                verInfo = get( "https://hub.spigotmc.org/versions/" + askedVersion + ".json" );
+            } catch ( IOException ex )
+            {
+                System.err.println( "Could not get version " + askedVersion + " does it exist? Try another version or use 'latest'" );
+                ex.printStackTrace();
+                System.exit( 1 );
+                return;
+            }
+            System.out.println( "Found version" );
+            System.out.println( verInfo );
+
+            buildInfo = new Gson().fromJson( verInfo, BuildInfo.class );
+
+            if ( buildNumber != -1 && buildInfo.getToolsVersion() != -1 && buildNumber < buildInfo.getToolsVersion() )
+            {
+                System.err.println( "**** Your BuildTools is out of date and will not build the requested version. Please grab a new copy from https://www.spigotmc.org/go/buildtools-dl" );
+                System.exit( 1 );
+            }
+
+            if ( !options.has( disableJavaCheck ) )
+            {
+                if ( buildInfo.getJavaVersions() == null )
+                {
+                    buildInfo.setJavaVersions( new int[]
+                    {
+                        JavaVersion.JAVA_7.getVersion(), JavaVersion.JAVA_8.getVersion()
+                    } );
+                }
+
+                Preconditions.checkArgument( buildInfo.getJavaVersions().length == 2, "Expected only two Java versions, got %s", JavaVersion.printVersions( buildInfo.getJavaVersions() ) );
+
+                JavaVersion curVersion = JavaVersion.getCurrentVersion();
+                JavaVersion minVersion = JavaVersion.getByVersion( buildInfo.getJavaVersions()[0] );
+                JavaVersion maxVersion = JavaVersion.getByVersion( buildInfo.getJavaVersions()[1] );
+
+                if ( curVersion.getVersion() < minVersion.getVersion() || curVersion.getVersion() > maxVersion.getVersion() )
+                {
+                    System.err.println( "*** The version you have requested to build requires Java versions between " + JavaVersion.printVersions( buildInfo.getJavaVersions() ) + ", but you are using " + curVersion );
+                    System.err.println( "*** Please rerun BuildTools using an appropriate Java version. For obvious reasons outdated MC versions do not support Java versions that did not exist at their release." );
+                    System.exit( 1 );
+                }
+            }
+        }
+
         File workDir = new File( "work" );
         workDir.mkdir();
 
@@ -311,58 +363,6 @@ public class Builder
 
         if ( !dontUpdate )
         {
-            if ( !dev )
-            {
-                String askedVersion = options.valueOf( jenkinsVersion );
-                System.out.println( "Attempting to build version: '" + askedVersion + "' use --rev <version> to override" );
-
-                String verInfo;
-                try
-                {
-                    verInfo = get( "https://hub.spigotmc.org/versions/" + askedVersion + ".json" );
-                } catch ( IOException ex )
-                {
-                    System.err.println( "Could not get version " + askedVersion + " does it exist? Try another version or use 'latest'" );
-                    ex.printStackTrace();
-                    System.exit( 1 );
-                    return;
-                }
-                System.out.println( "Found version" );
-                System.out.println( verInfo );
-
-                buildInfo = new Gson().fromJson( verInfo, BuildInfo.class );
-
-                if ( buildNumber != -1 && buildInfo.getToolsVersion() != -1 && buildNumber < buildInfo.getToolsVersion() )
-                {
-                    System.err.println( "**** Your BuildTools is out of date and will not build the requested version. Please grab a new copy from https://www.spigotmc.org/go/buildtools-dl" );
-                    System.exit( 1 );
-                }
-
-                if ( !options.has( disableJavaCheck ) )
-                {
-                    if ( buildInfo.getJavaVersions() == null )
-                    {
-                        buildInfo.setJavaVersions( new int[]
-                        {
-                            JavaVersion.JAVA_7.getVersion(), JavaVersion.JAVA_8.getVersion()
-                        } );
-                    }
-
-                    Preconditions.checkArgument( buildInfo.getJavaVersions().length == 2, "Expected only two Java versions, got %s", JavaVersion.printVersions( buildInfo.getJavaVersions() ) );
-
-                    JavaVersion curVersion = JavaVersion.getCurrentVersion();
-                    JavaVersion minVersion = JavaVersion.getByVersion( buildInfo.getJavaVersions()[0] );
-                    JavaVersion maxVersion = JavaVersion.getByVersion( buildInfo.getJavaVersions()[1] );
-
-                    if ( curVersion.getVersion() < minVersion.getVersion() || curVersion.getVersion() > maxVersion.getVersion() )
-                    {
-                        System.err.println( "*** The version you have requested to build requires Java versions between " + JavaVersion.printVersions( buildInfo.getJavaVersions() ) + ", but you are using " + curVersion );
-                        System.err.println( "*** Please rerun BuildTools using an appropriate Java version. For obvious reasons outdated MC versions do not support Java versions that did not exist at their release." );
-                        System.exit( 1 );
-                    }
-                }
-            }
-
             boolean buildDataChanged = pull( buildGit, buildInfo.getRefs().getBuildData() );
             boolean bukkitChanged = pull( bukkitGit, buildInfo.getRefs().getBukkit() );
             boolean craftBukkitChanged = pull( craftBukkitGit, buildInfo.getRefs().getCraftBukkit() );
