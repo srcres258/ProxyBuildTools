@@ -55,7 +55,7 @@ public class VersionInfo
     {
         return hashFromUrl( mappingsUrl );
     }
-    private static final Pattern URL_PATTERN = Pattern.compile( "https://launcher.mojang.com/v1/objects/([0-9a-f]{40})/.*" );
+    private static final Pattern URL_PATTERN = Pattern.compile( "https://(?:launcher|piston-data).mojang.com/v1/objects/([\\da-f]{40})/.*" );
 
     public static String hashFromUrl(String url)
     {
