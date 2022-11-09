@@ -12,6 +12,9 @@ import com.google.common.io.CharStreams;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import difflib.DiffUtils;
 import difflib.Patch;
 import java.awt.Desktop;
@@ -413,7 +416,7 @@ public class Builder
                 download( versionInfo.getServerUrl(), vanillaJar, HashFormat.MD5, versionInfo.getMinecraftHash() );
             } else
             {
-                download( String.format( "https://s3.amazonaws.com/Minecraft.Download/versions/%1$s/minecraft_server.%1$s.jar", versionInfo.getMinecraftVersion() ), vanillaJar, HashFormat.MD5, versionInfo.getMinecraftHash() );
+                download( getServerVanillaUrl( versionInfo.getMinecraftVersion() ), vanillaJar, HashFormat.MD5, versionInfo.getMinecraftHash() );
             }
         }
 
@@ -1093,6 +1096,33 @@ public class Builder
         Files.write( bytes, target );
 
         return target;
+    }
+
+    public static String getServerVanillaUrl(String version) throws Exception
+    {
+        Gson gson = new Gson();
+
+        String responseManifest = get( "https://launchermeta.mojang.com/mc/game/version_manifest.json" );
+        JsonObject manifest = gson.fromJson( responseManifest, JsonObject.class );
+
+        JsonArray manifestVersions = manifest.getAsJsonArray( "versions" );
+        for ( JsonElement manifestVersionElement : manifestVersions )
+        {
+            if ( manifestVersionElement.isJsonObject() )
+            {
+                JsonObject manifestVersion = manifestVersionElement.getAsJsonObject();
+                if ( manifestVersion.get( "id" ).getAsString().equals( version ) )
+                {
+                    String urlVersionData = manifestVersion.get( "url" ).getAsString();
+
+                    String responseVersionData = get( urlVersionData );
+                    JsonObject versionData = gson.fromJson( responseVersionData, JsonObject.class );
+                    return versionData.getAsJsonObject( "downloads" ).getAsJsonObject( "server" ).get( "url" ).getAsString();
+                }
+            }
+        }
+
+        throw new RuntimeException( "Error cannot get the URL for legacy server version " + version );
     }
 
     public static void disableHttpsCertificateCheck()
