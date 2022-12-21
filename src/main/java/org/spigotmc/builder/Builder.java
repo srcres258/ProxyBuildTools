@@ -792,8 +792,8 @@ public class Builder
     public static final String get(String url) throws IOException
     {
         URLConnection con = new URL( url ).openConnection();
-        con.setConnectTimeout( 5000 );
-        con.setReadTimeout( 5000 );
+        con.setConnectTimeout( 30000 );
+        con.setReadTimeout( 30000 );
 
         try ( InputStreamReader r = new InputStreamReader( con.getInputStream() ) )
         {
