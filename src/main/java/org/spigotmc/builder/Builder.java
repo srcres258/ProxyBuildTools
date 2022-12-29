@@ -498,14 +498,14 @@ public class Builder
                 // 1.17+
                 if ( memberMappings.exists() )
                 {
-                    runMaven( CWD, "install:install-file", "-Dfile=" + memberMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                    runMavenInstall( CWD, "install:install-file", "-Dfile=" + memberMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
                             "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-members", "-DgeneratePom=false" );
                 }
 
                 // 1.17
                 if ( fieldMappings.exists() )
                 {
-                    runMaven( CWD, "install:install-file", "-Dfile=" + fieldMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                    runMavenInstall( CWD, "install:install-file", "-Dfile=" + fieldMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
                             "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot-fields", "-DgeneratePom=false" );
 
                     File combinedMappings = new File( workDir, "bukkit-" + mappingsVersion + "-combined.csrg" );
@@ -514,17 +514,17 @@ public class Builder
                         mapUtil.makeCombinedMaps( combinedMappings, memberMappings );
                     }
 
-                    runMaven( CWD, "install:install-file", "-Dfile=" + combinedMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                    runMavenInstall( CWD, "install:install-file", "-Dfile=" + combinedMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
                             "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
                 } else
                 {
                     // 1.18+
-                    runMaven( CWD, "install:install-file", "-Dfile=" + classMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
+                    runMavenInstall( CWD, "install:install-file", "-Dfile=" + classMappings, "-Dpackaging=csrg", "-DgroupId=org.spigotmc",
                             "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-spigot", "-DgeneratePom=false" );
                 }
 
                 // 1.17+
-                runMaven( CWD, "install:install-file", "-Dfile=" + mojangMappings, "-Dpackaging=txt", "-DgroupId=org.spigotmc",
+                runMavenInstall( CWD, "install:install-file", "-Dfile=" + mojangMappings, "-Dpackaging=txt", "-DgroupId=org.spigotmc",
                         "-DartifactId=minecraft-server", "-Dversion=" + versionInfo.getSpigotVersion(), "-Dclassifier=maps-mojang", "-DgeneratePom=false" );
             }
 
@@ -552,7 +552,7 @@ public class Builder
                     ( versionInfo.getPackageMappings() == null ) ? fieldMappings.getPath() : "BuildData/mappings/" + versionInfo.getPackageMappings(), finalMappedJar.getPath() ).split( " " ) );
         }
 
-        runMaven( CWD, "install:install-file", "-Dfile=" + finalMappedJar, "-Dpackaging=jar", "-DgroupId=org.spigotmc",
+        runMavenInstall( CWD, "install:install-file", "-Dfile=" + finalMappedJar, "-Dpackaging=jar", "-DgroupId=org.spigotmc",
                 "-DartifactId=minecraft-server", "-Dversion=" + ( versionInfo.getSpigotVersion() != null ? versionInfo.getSpigotVersion() : versionInfo.getMinecraftVersion() + "-SNAPSHOT" ) );
 
         File decompileDir = new File( workDir, "decompile-" + mappingsVersion );
@@ -687,18 +687,18 @@ public class Builder
         if ( compile.contains( Compile.CRAFTBUKKIT ) )
         {
             System.out.println( "Compiling Bukkit" );
-            runMaven( bukkit, "clean", "install" );
+            runMavenAPI( bukkit, "clean", "install" );
             if ( generateDocs )
             {
-                runMaven( bukkit, "javadoc:jar" );
+                runMavenAPI( bukkit, "javadoc:jar" );
             }
             if ( generateSource )
             {
-                runMaven( bukkit, "source:jar" );
+                runMavenAPI( bukkit, "source:jar" );
             }
 
             System.out.println( "Compiling CraftBukkit" );
-            runMaven( craftBukkit, "clean", "install" );
+            runMavenServer( craftBukkit, "clean", "install" );
         }
 
         try
@@ -709,16 +709,16 @@ public class Builder
             if ( compile.contains( Compile.SPIGOT ) )
             {
                 System.out.println( "Compiling Spigot & Spigot-API" );
-                runMaven( spigot, "clean", "install" );
+                runMavenServer( spigot, "clean", "install" );
 
                 File spigotApi = new File( spigot, "Spigot-API" );
                 if ( generateDocs )
                 {
-                    runMaven( spigotApi, "javadoc:jar" );
+                    runMavenAPI( spigotApi, "javadoc:jar" );
                 }
                 if ( generateSource )
                 {
-                    runMaven( spigotApi, "source:jar" );
+                    runMavenAPI( spigotApi, "source:jar" );
                 }
             }
         } catch ( Exception ex )
@@ -845,7 +845,22 @@ public class Builder
         return !result.getTrackingRefUpdates().isEmpty();
     }
 
-    public static int runMaven(File workDir, String... command) throws Exception
+    private static int runMavenInstall(File workDir, String... command) throws Exception
+    {
+        return runMaven0( workDir, false, false, command );
+    }
+
+    private static int runMavenAPI(File workDir, String... command) throws Exception
+    {
+        return runMaven0( workDir, dev, false, command );
+    }
+
+    private static int runMavenServer(File workDir, String... command) throws Exception
+    {
+        return runMaven0( workDir, dev, remapped, command );
+    }
+
+    private static int runMaven0(File workDir, boolean dev, boolean remapped, String... command) throws Exception
     {
         List<String> args = new LinkedList<>();
 
