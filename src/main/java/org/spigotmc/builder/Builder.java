@@ -711,11 +711,11 @@ public class Builder
 
         try
         {
-            runProcess( spigot, applyPatchesShell, "applyPatches.sh" );
-            System.out.println( "*** Spigot patches applied!" );
-
             if ( compile.contains( Compile.SPIGOT ) )
             {
+                runProcess( spigot, applyPatchesShell, "applyPatches.sh" );
+                System.out.println( "*** Spigot patches applied!" );
+
                 System.out.println( "Compiling Spigot & Spigot-API" );
                 runMavenServer( spigot, "clean", "install" );
 
