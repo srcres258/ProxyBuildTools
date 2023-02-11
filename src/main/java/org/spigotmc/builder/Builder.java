@@ -47,9 +47,11 @@ import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
@@ -74,6 +76,7 @@ import org.eclipse.jgit.api.errors.JGitInternalException;
 import org.eclipse.jgit.lib.StoredConfig;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.FetchResult;
+import org.eclipse.jgit.transport.RefSpec;
 import org.spigotmc.mapper.MapUtil;
 
 public class Builder
@@ -89,6 +92,7 @@ public class Builder
     private static boolean generateDocs;
     private static boolean dev;
     private static boolean remapped;
+    private static List<PullRequest> pullRequests;
     private static String applyPatchesShell = "sh";
     private static boolean didClone = false;
     //
@@ -163,6 +167,7 @@ public class Builder
         {
         } ).withValuesSeparatedBy( ',' );
         OptionSpec<Void> compileIfChanged = parser.accepts( "compile-if-changed", "Run BuildTools only when changes are detected in the repository" );
+        OptionSpec<PullRequest> buildPullRequest = parser.acceptsAll( Arrays.asList( "pull-request", "pr" ), "Build specific pull requests" ).withOptionalArg().withValuesConvertedBy( new PullRequest.PullRequestConverter() );
 
         OptionSet options = parser.parse( args );
 
@@ -181,6 +186,8 @@ public class Builder
         dev = options.has( devFlag );
         remapped = options.has( remappedFlag );
         compile = options.valuesOf( toCompile );
+        pullRequests = options.valuesOf( buildPullRequest );
+        validatedPullRequestsOptions();
         if ( options.has( skipCompileFlag ) )
         {
             compile = Collections.singletonList( Compile.NONE );
@@ -375,10 +382,10 @@ public class Builder
 
         if ( !dontUpdate )
         {
-            boolean buildDataChanged = pull( buildGit, buildInfo.getRefs().getBuildData() );
-            boolean bukkitChanged = pull( bukkitGit, buildInfo.getRefs().getBukkit() );
-            boolean craftBukkitChanged = pull( craftBukkitGit, buildInfo.getRefs().getCraftBukkit() );
-            boolean spigotChanged = pull( spigotGit, buildInfo.getRefs().getSpigot() );
+            boolean buildDataChanged = pull( buildGit, buildInfo.getRefs().getBuildData(), null );
+            boolean bukkitChanged = pull( bukkitGit, buildInfo.getRefs().getBukkit(), getPullRequest( Repository.BUKKIT ) );
+            boolean craftBukkitChanged = pull( craftBukkitGit, buildInfo.getRefs().getCraftBukkit(), getPullRequest( Repository.CRAFTBUKKIT ) );
+            boolean spigotChanged = pull( spigotGit, buildInfo.getRefs().getSpigot(), getPullRequest( Repository.SPIGOT ) );
 
             // Checks if any of the 4 repositories have been updated via a fetch, the --compile-if-changed flag is set and none of the repositories were cloned in this run.
             if ( !buildDataChanged && !bukkitChanged && !craftBukkitChanged && !spigotChanged && options.has( compileIfChanged ) && !didClone )
@@ -654,7 +661,8 @@ public class Builder
         craftBukkitGit.checkout().setCreateBranch( true ).setForceRefUpdate( true ).setName( "patched" ).call();
         craftBukkitGit.add().addFilepattern( "src/main/java/net/" ).call();
         craftBukkitGit.commit().setSign( false ).setMessage( "CraftBukkit $ " + new Date() ).call();
-        craftBukkitGit.checkout().setName( buildInfo.getRefs().getCraftBukkit() ).call();
+        PullRequest craftBukkitPullRequest = getPullRequest( Repository.CRAFTBUKKIT );
+        craftBukkitGit.checkout().setName( ( craftBukkitPullRequest == null ) ? buildInfo.getRefs().getCraftBukkit() : "origin/pr/" + craftBukkitPullRequest.getId() ).call();
 
         FileUtils.moveDirectory( tmpNms, nmsDir );
 
@@ -818,7 +826,7 @@ public class Builder
         }
     }
 
-    public static boolean pull(Git repo, String ref) throws Exception
+    public static boolean pull(Git repo, String ref, PullRequest pullRequest) throws Exception
     {
         System.out.println( "Pulling updates for " + repo.getRepository().getDirectory() );
 
@@ -830,11 +838,26 @@ public class Builder
             System.err.println( "*** Warning, could not find origin/master ref, but continuing anyway." );
             System.err.println( "*** If further errors occur please delete " + repo.getRepository().getDirectory().getParent() + " and retry." );
         }
-        FetchResult result = repo.fetch().call();
+
+        FetchResult result;
+        if ( pullRequest != null )
+        {
+            result = repo.fetch().setRefSpecs( new RefSpec( "+refs/pull-requests/" + pullRequest.getId() + "/from:refs/remotes/origin/pr/" + pullRequest.getId() ) ).call();
+        } else
+        {
+            result = repo.fetch().call();
+        }
 
         System.out.println( "Successfully fetched updates!" );
 
-        repo.reset().setRef( ref ).setMode( ResetCommand.ResetType.HARD ).call();
+        if ( pullRequest != null )
+        {
+            repo.checkout().setName( "origin/pr/" + pullRequest.getId() ).setForced( true ).call();
+        } else
+        {
+            repo.reset().setRef( ref ).setMode( ResetCommand.ResetType.HARD ).call();
+        }
+
         if ( ref.equals( "master" ) )
         {
             repo.reset().setRef( "origin/master" ).setMode( ResetCommand.ResetType.HARD ).call();
@@ -843,6 +866,32 @@ public class Builder
 
         // Return true if fetch changed any tracking refs.
         return !result.getTrackingRefUpdates().isEmpty();
+    }
+
+    public static PullRequest getPullRequest(Repository repository)
+    {
+        for ( PullRequest request : pullRequests )
+        {
+            if ( request.getRepository() == repository )
+            {
+                return request;
+            }
+        }
+
+        return null;
+    }
+
+    public static void validatedPullRequestsOptions()
+    {
+        Set<Repository> repositories = EnumSet.noneOf( Repository.class );
+
+        for ( PullRequest pullRequest : pullRequests )
+        {
+            if ( !repositories.add( pullRequest.getRepository() ) )
+            {
+                throw new RuntimeException( "Pull request option for repository " + pullRequest.getRepository() + " is present multiple times. Only one per repository can be specified." );
+            }
+        }
     }
 
     private static int runMavenInstall(File workDir, String... command) throws Exception
