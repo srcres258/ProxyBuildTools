@@ -44,6 +44,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
@@ -197,6 +198,19 @@ public class Builder
         {
             System.err.println( "Using --dev or --dont-update with --rev makes no sense, exiting." );
             System.exit( 1 );
+        }
+        if ( compile.isEmpty() && !pullRequests.isEmpty() )
+        {
+            compile = new ArrayList<>();
+            if ( getPullRequest( Repository.BUKKIT ) != null || getPullRequest( Repository.CRAFTBUKKIT ) != null )
+            {
+                compile.add( Compile.CRAFTBUKKIT );
+            }
+
+            if ( getPullRequest( Repository.SPIGOT ) != null )
+            {
+                compile.add( Compile.SPIGOT );
+            }
         }
 
         try
