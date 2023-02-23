@@ -74,6 +74,7 @@ import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.JGitInternalException;
+import org.eclipse.jgit.lib.GpgConfig;
 import org.eclipse.jgit.lib.StoredConfig;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.FetchResult;
@@ -674,7 +675,7 @@ public class Builder
         craftBukkitGit.branchDelete().setBranchNames( "patched" ).setForce( true ).call();
         craftBukkitGit.checkout().setCreateBranch( true ).setForceRefUpdate( true ).setName( "patched" ).call();
         craftBukkitGit.add().addFilepattern( "src/main/java/net/" ).call();
-        craftBukkitGit.commit().setSign( false ).setMessage( "CraftBukkit $ " + new Date() ).call();
+        craftBukkitGit.commit().setGpgConfig( new GpgConfig( null, null, null ) ).setSign( false ).setMessage( "CraftBukkit $ " + new Date() ).call();
         PullRequest craftBukkitPullRequest = getPullRequest( Repository.CRAFTBUKKIT );
         craftBukkitGit.checkout().setName( ( craftBukkitPullRequest == null ) ? buildInfo.getRefs().getCraftBukkit() : "origin/pr/" + craftBukkitPullRequest.getId() ).call();
 
