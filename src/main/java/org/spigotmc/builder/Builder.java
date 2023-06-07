@@ -98,7 +98,7 @@ public class Builder
     private static String applyPatchesShell = "sh";
     private static boolean didClone = false;
     //
-    private static BuildInfo buildInfo = new BuildInfo( "dev", "Development", 0, null, new BuildInfo.Refs( "master", "master", "master", "master" ) );
+    private static BuildInfo buildInfo = BuildInfo.DEV;
     //
     private static File msysDir;
     private static File maven;
@@ -162,6 +162,7 @@ public class Builder
         OptionSpec<Void> generateSourceFlag = parser.accepts( "generate-source", "Generate source jar" );
         OptionSpec<Void> generateDocsFlag = parser.accepts( "generate-docs", "Generate Javadoc jar" );
         OptionSpec<Void> devFlag = parser.accepts( "dev", "Development mode" );
+        OptionSpec<Void> experimentalFlag = parser.accepts( "experimental", "Build experimental version" );
         OptionSpec<Void> remappedFlag = parser.accepts( "remapped", "Produce and install extra remapped jars" );
         OptionSpec<File> outputDir = parser.acceptsAll( Arrays.asList( "o", "output-dir" ), "Final jar output directory" ).withRequiredArg().ofType( File.class ).defaultsTo( CWD );
         OptionSpec<String> jenkinsVersion = parser.accepts( "rev", "Version to build" ).withRequiredArg().defaultsTo( "latest" );
@@ -186,6 +187,12 @@ public class Builder
         generateSource = options.has( generateSourceFlag );
         generateDocs = options.has( generateDocsFlag );
         dev = options.has( devFlag );
+        // Experimental implies dev but with different refs
+        if ( options.has( experimentalFlag ) )
+        {
+            dev = true;
+            buildInfo = BuildInfo.EXPERIMENTAL;
+        }
         remapped = options.has( remappedFlag );
         compile = options.valuesOf( toCompile );
         pullRequests = options.valuesOf( buildPullRequest );

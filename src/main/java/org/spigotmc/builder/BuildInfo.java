@@ -8,6 +8,9 @@ import lombok.Data;
 public class BuildInfo
 {
 
+    public static BuildInfo DEV = new BuildInfo( "dev", "Development", 0, null, new BuildInfo.Refs( "master", "master", "master", "master" ) );
+    public static BuildInfo EXPERIMENTAL = new BuildInfo( "exp", "Experimental", 0, null, new BuildInfo.Refs( "experimental", "experimental", "experimental", "experimental" ) );
+    //
     private String name;
     private String description;
     private int toolsVersion = -1;
