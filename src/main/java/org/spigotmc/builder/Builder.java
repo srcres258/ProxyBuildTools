@@ -875,6 +875,9 @@ public class Builder
         if ( pullRequest != null )
         {
             repo.checkout().setName( "origin/pr/" + pullRequest.getId() ).setForced( true ).call();
+        } else if ( ref.equals( "experimental" ) )
+        {
+            repo.checkout().setName( "origin/experimental" ).setForced( true ).call();
         } else
         {
             repo.reset().setRef( ref ).setMode( ResetCommand.ResetType.HARD ).call();
