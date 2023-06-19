@@ -9,7 +9,7 @@ public class BuildInfo
 {
 
     public static BuildInfo DEV = new BuildInfo( "dev", "Development", 0, null, new BuildInfo.Refs( "master", "master", "master", "master" ) );
-    public static BuildInfo EXPERIMENTAL = new BuildInfo( "exp", "Experimental", 0, null, new BuildInfo.Refs( "experimental", "experimental", "experimental", "experimental" ) );
+    public static BuildInfo EXPERIMENTAL = new BuildInfo( "exp", "Experimental", 0, null, new BuildInfo.Refs( "origin/experimental", "origin/experimental", "origin/experimental", "origin/experimental" ) );
     //
     private String name;
     private String description;
