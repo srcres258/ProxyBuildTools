@@ -33,3 +33,6 @@ manifest.mf
 .idea/
 
 out*
+
+# Debugging directory
+/run
