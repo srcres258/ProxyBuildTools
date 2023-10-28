@@ -32,9 +32,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.management.ManagementFactory;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLConnection;
+import java.net.*;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemException;
 import java.nio.file.FileSystems;
@@ -102,6 +100,10 @@ public class Builder
     //
     private static File msysDir;
     private static File maven;
+    private static boolean proxyAvailable = false;
+    private static String proxyAddress = "";
+    private static int proxyPort = 0;
+    private static BuilderProxySelector proxySelector = null;
 
     public static void main(String[] args) throws Exception
     {
@@ -171,9 +173,23 @@ public class Builder
         } ).withValuesSeparatedBy( ',' );
         OptionSpec<Void> compileIfChanged = parser.accepts( "compile-if-changed", "Run BuildTools only when changes are detected in the repository" );
         OptionSpec<PullRequest> buildPullRequest = parser.acceptsAll( Arrays.asList( "pull-request", "pr" ), "Build specific pull requests" ).withOptionalArg().withValuesConvertedBy( new PullRequest.PullRequestConverter() );
+        OptionSpec<Void> proxy = parser.accepts( "proxy", "Declare the program to use a proxy specified by --proxy-addr and --proxy-port" );
+        OptionSpec<String> proxyAddress = parser.accepts( "proxy-addr", "The address of the proxy, either an IP or a domain name" ).withRequiredArg();
+        OptionSpec<String> proxyPort = parser.accepts( "proxy-port", "The port of the proxy, must be an integer within the closed interval from 0 to 65535" ).withRequiredArg();
 
         OptionSet options = parser.parse( args );
 
+        if (options.has(proxy)) {
+            if (!options.has(proxyAddress) || !options.has(proxyPort)) {
+                System.err.println( "--proxy must be used with both --proxy-addr and --proxy-port, exiting." );
+                System.exit(1);
+            }
+            Builder.proxyAddress = options.valueOf(proxyAddress);
+            Builder.proxyPort = Integer.parseInt(options.valueOf(proxyPort));
+            Builder.proxySelector = new BuilderProxySelector(Builder.proxyAddress, Builder.proxyPort);
+            Builder.proxyAvailable = true;
+            ProxySelector.setDefault(Builder.proxySelector);
+        }
         if ( options.has( help ) )
         {
             parser.printHelpOn( System.out );
@@ -1169,7 +1185,11 @@ public class Builder
 
         System.out.println( "Starting download of " + url );
 
-        byte[] bytes = Resources.toByteArray( new URL( url ) );
+        byte[] bytes;
+        if (Builder.proxyAvailable)
+            bytes = ProxyResources.toByteArray(new URL(url), Builder.proxyAddress, Builder.proxyPort);
+        else
+            bytes = Resources.toByteArray(new URL(url));
         String hash = hashFormat.getHash().hashBytes( bytes ).toString();
 
         System.out.println( "Downloaded file: " + target + " with hash: " + hash );
