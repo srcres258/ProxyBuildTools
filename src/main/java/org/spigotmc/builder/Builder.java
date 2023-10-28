@@ -18,21 +18,10 @@ import com.google.gson.JsonObject;
 import difflib.DiffUtils;
 import difflib.Patch;
 import java.awt.Desktop;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystemException;
 import java.nio.file.FileSystems;
@@ -42,15 +31,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.Enumeration;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
@@ -68,6 +49,10 @@ import joptsimple.util.EnumConverter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.TeeOutputStream;
+import org.dom4j.*;
+import org.dom4j.io.SAXReader;
+import org.dom4j.io.SAXWriter;
+import org.dom4j.io.XMLWriter;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -104,6 +89,7 @@ public class Builder
     private static String proxyAddress = "";
     private static int proxyPort = 0;
     private static BuilderProxySelector proxySelector = null;
+    private static boolean mavenConfigured = false;
 
     public static void main(String[] args) throws Exception
     {
@@ -932,6 +918,83 @@ public class Builder
         }
     }
 
+    private static void configureMaven()
+    {
+        if (mavenConfigured) {
+            System.out.println("Maven is already configured.");
+            return;
+        }
+        if (maven == null)
+            throw new IllegalStateException("Attempting to configure maven before it is initialized.");
+
+        if (Builder.proxyAvailable) {
+            File settingsFile = new File(maven.toPath().resolve("conf").toFile(), "settings.xml");
+            if (!settingsFile.exists()) {
+                System.out.println("Maven's settings file doesn't exist, creating.");
+                Document document = DocumentHelper.createDocument();
+                Element root = document.addElement("settings");
+//                root.addNamespace("xmlns", "http://maven.apache.org/SETTINGS/1.0.0");
+                try {
+                    XMLWriter writer = new XMLWriter(Files.newWriter(settingsFile, StandardCharsets.UTF_8));
+                    writer.write(document);
+                    writer.close();
+                } catch (IOException e) {
+                    throw new RuntimeException("Error during the creation of maven's settings file.", e);
+                }
+            }
+            SAXReader reader = new SAXReader();
+            Document settingsDocument;
+            try {
+                FileInputStream fis = new FileInputStream(settingsFile);
+                InputStreamReader isr = new InputStreamReader(fis, StandardCharsets.UTF_8);
+                settingsDocument = reader.read(isr);
+                isr.close();
+                fis.close();
+            } catch (DocumentException | FileNotFoundException e) {
+                throw new RuntimeException("Error reading maven's settings file.", e);
+            } catch (IOException e) {
+                throw new RuntimeException("Error finishing up reading maven's settings file.", e);
+            }
+            Element rootElement = settingsDocument.getRootElement();
+            Element proxiesElement = rootElement.element("proxies");
+            if (proxiesElement == null)
+                proxiesElement = rootElement.addElement("proxies");
+            for (Iterator<Element> iter = proxiesElement.elementIterator(); iter.hasNext(); ) {
+                Element element = iter.next();
+                proxiesElement.remove(element);
+            }
+            Element proxyElement = proxiesElement.addElement("proxy");
+            Element idElement = proxyElement.addElement("id");
+            idElement.setText("http-proxy");
+            Element activeElement = proxyElement.addElement("active");
+            activeElement.setText("true");
+            Element protocolElement = proxyElement.addElement("protocol");
+            protocolElement.setText("http");
+            Element hostElement = proxyElement.addElement("host");
+            hostElement.setText(Builder.proxyAddress);
+            Element portElement = proxyElement.addElement("port");
+            portElement.setText(Integer.toString(Builder.proxyPort));
+            XMLWriter writer;
+            try {
+                writer = new XMLWriter(Files.newWriter(settingsFile, StandardCharsets.UTF_8));
+            } catch (FileNotFoundException e) {
+                throw new RuntimeException("Error attempting to initialise a writer for maven's settings file.", e);
+            }
+            try {
+                writer.write(settingsDocument);
+            } catch (IOException e) {
+                throw new RuntimeException("Error attempting to write maven's settings file.", e);
+            }
+            try {
+                writer.close();
+            } catch (IOException e) {
+                throw new RuntimeException("Error attempting to finish up writing maven's settings file.", e);
+            }
+        }
+
+        mavenConfigured = true;
+    }
+
     private static int runMavenInstall(File workDir, String... command) throws Exception
     {
         return runMaven0( workDir, false, false, command );
@@ -949,6 +1012,9 @@ public class Builder
 
     private static int runMaven0(File workDir, boolean dev, boolean remapped, String... command) throws Exception
     {
+        if (!mavenConfigured)
+            configureMaven();
+
         List<String> args = new LinkedList<>();
 
         if ( IS_WINDOWS )
