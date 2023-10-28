@@ -51,7 +51,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import org.dom4j.*;
 import org.dom4j.io.SAXReader;
-import org.dom4j.io.SAXWriter;
 import org.dom4j.io.XMLWriter;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
