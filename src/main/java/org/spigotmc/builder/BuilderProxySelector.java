@@ -1,5 +1,7 @@
 package org.spigotmc.builder;
 
+import com.google.common.collect.Lists;
+
 import java.io.IOException;
 import java.net.*;
 import java.util.List;
@@ -27,12 +29,12 @@ public class BuilderProxySelector extends ProxySelector {
         if (proxyAvailable) {
             try {
                 Proxy proxy = ProxyHelper.newHTTPProxy(proxyAddress, proxyPort);
-                return List.of(proxy);
+                return Lists.asList(proxy, new Proxy[0]);
             } catch (UnknownHostException e) {
                 throw new RuntimeException(String.format("Cannot find the target proxy address: %s", proxyAddress), e);
             }
         } else {
-            return List.of(Proxy.NO_PROXY);
+            return Lists.asList(Proxy.NO_PROXY, new Proxy[0]);
         }
     }
 
